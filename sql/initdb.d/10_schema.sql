@@ -14,14 +14,16 @@ CREATE TABLE `users` (
 CREATE TABLE `icons` (
   `id` BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
   `user_id` BIGINT NOT NULL,
-  `image` LONGBLOB NOT NULL
+  `image` LONGBLOB NOT NULL,
+  INDEX `idx_user_id` (`user_id`)
 ) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_bin;
 
 -- ユーザごとのカスタムテーマ
 CREATE TABLE `themes` (
   `id` BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
   `user_id` BIGINT NOT NULL,
-  `dark_mode` BOOLEAN NOT NULL
+  `dark_mode` BOOLEAN NOT NULL,
+  INDEX `idx_user_id` (`user_id`)
 ) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_bin;
 
 -- ライブ配信
@@ -55,8 +57,11 @@ CREATE TABLE `tags` (
 CREATE TABLE `livestream_tags` (
   `id` BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
   `livestream_id` BIGINT NOT NULL,
-  `tag_id` BIGINT NOT NULL
+  `tag_id` BIGINT NOT NULL,
+  INDEX `idx_livestream_id` (`livestream_id`),
+  INDEX `idx_tag_id` (`tag_id`)
 ) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_bin;
+-- livestream_tagsのlivestream_idとtag_idにインデックスを追加する
 
 -- ライブ配信視聴履歴
 CREATE TABLE `livestream_viewers_history` (
