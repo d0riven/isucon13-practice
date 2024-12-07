@@ -36,6 +36,7 @@ CREATE TABLE `livestreams` (
   `thumbnail_url` VARCHAR(255) NOT NULL,
   `start_at` BIGINT NOT NULL,
   `end_at` BIGINT NOT NULL
+  INDEX `idx_user_id` (`user_id`)
 ) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_bin;
 
 -- ライブ配信予約枠
@@ -61,7 +62,6 @@ CREATE TABLE `livestream_tags` (
   INDEX `idx_livestream_id` (`livestream_id`),
   INDEX `idx_tag_id` (`tag_id`)
 ) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_bin;
--- livestream_tagsのlivestream_idとtag_idにインデックスを追加する
 
 -- ライブ配信視聴履歴
 CREATE TABLE `livestream_viewers_history` (
@@ -78,7 +78,9 @@ CREATE TABLE `livecomments` (
   `livestream_id` BIGINT NOT NULL,
   `comment` VARCHAR(255) NOT NULL,
   `tip` BIGINT NOT NULL DEFAULT 0,
-  `created_at` BIGINT NOT NULL
+  `created_at` BIGINT NOT NULL,
+  INDEX `idx_user_id` (`user_id`),
+  INDEX `idx_livestream_id` (`livestream_id`)
 ) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_bin;
 
 -- ユーザからのライブコメントのスパム報告
@@ -87,7 +89,10 @@ CREATE TABLE `livecomment_reports` (
   `user_id` BIGINT NOT NULL,
   `livestream_id` BIGINT NOT NULL,
   `livecomment_id` BIGINT NOT NULL,
-  `created_at` BIGINT NOT NULL
+  `created_at` BIGINT NOT NULL,
+  INDEX `idx_user_id` (`user_id`),
+  INDEX `idx_livestream_id` (`livestream_id`),
+  INDEX `idx_livecomment_id` (`livecomment_id`)
 ) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_bin;
 
 -- 配信者からのNGワード登録
@@ -96,7 +101,9 @@ CREATE TABLE `ng_words` (
   `user_id` BIGINT NOT NULL,
   `livestream_id` BIGINT NOT NULL,
   `word` VARCHAR(255) NOT NULL,
-  `created_at` BIGINT NOT NULL
+  `created_at` BIGINT NOT NULL,
+  INDEX `idx_user_id` (`user_id`),
+  INDEX `idx_livestream_id` (`livestream_id`)
 ) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_bin;
 CREATE INDEX ng_words_word ON ng_words(`word`);
 
@@ -107,5 +114,7 @@ CREATE TABLE `reactions` (
   `livestream_id` BIGINT NOT NULL,
   -- :innocent:, :tada:, etc...
   `emoji_name` VARCHAR(255) NOT NULL,
-  `created_at` BIGINT NOT NULL
+  `created_at` BIGINT NOT NULL,
+  INDEX `idx_user_id` (`user_id`),
+  INDEX `idx_livestream_id` (`livestream_id`)
 ) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_bin;
