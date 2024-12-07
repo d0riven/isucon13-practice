@@ -430,3 +430,42 @@ func fillUserResponse(ctx context.Context, tx *sqlx.Tx, userModel UserModel) (Us
 
 	return user, nil
 }
+
+func fillUserResponseForSearch(livestreamSearchModel LivestreamSearchModel) (User, error) {
+	userModel := UserModel{
+		ID:             livestreamSearchModel.UserID,
+		Name:           livestreamSearchModel.Name,
+		DisplayName:    livestreamSearchModel.DisplayName,
+		Description:    livestreamSearchModel.UserDescription,
+		HashedPassword: livestreamSearchModel.HashedPassword,
+	}
+	themeModel := ThemeModel{
+		ID:       livestreamSearchModel.ThemeID,
+		UserID:   livestreamSearchModel.UserID,
+		DarkMode: livestreamSearchModel.DarkMode,
+	}
+
+	image := livestreamSearchModel.Image
+	if image == nil {
+		var err error
+		image, err = os.ReadFile(fallbackImage)
+		if err != nil {
+			return User{}, err
+		}
+	}
+	iconHash := sha256.Sum256(image)
+
+	user := User{
+		ID:          userModel.ID,
+		Name:        userModel.Name,
+		DisplayName: userModel.DisplayName,
+		Description: userModel.Description,
+		Theme: Theme{
+			ID:       themeModel.ID,
+			DarkMode: themeModel.DarkMode,
+		},
+		IconHash: fmt.Sprintf("%x", iconHash),
+	}
+
+	return user, nil
+}

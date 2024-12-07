@@ -42,14 +42,28 @@ type LivestreamModel struct {
 	EndAt        int64  `db:"end_at" json:"end_at"`
 }
 
+type LivestreamSearchModel struct {
+	LivestreamModel
+
+	Name            string `db:"name"`
+	DisplayName     string `db:"display_name"`
+	UserDescription string `db:"user_description"`
+	HashedPassword  string `db:"password"`
+
+	ThemeID  int64 `db:"theme_id"`
+	DarkMode bool  `db:"dark_mode"`
+
+	Image []byte `db:"image"`
+}
+
 type Livestream struct {
 	ID           int64  `json:"id"`
-	Owner        User   `json:"owner"`
+	Owner        User   `json:"owner"` // translate livestream model by user_id
 	Title        string `json:"title"`
 	Description  string `json:"description"`
 	PlaylistUrl  string `json:"playlist_url"`
 	ThumbnailUrl string `json:"thumbnail_url"`
-	Tags         []Tag  `json:"tags"`
+	Tags         []Tag  `json:"tags"` // translate livestream model by tag_id
 	StartAt      int64  `json:"start_at"`
 	EndAt        int64  `json:"end_at"`
 }
@@ -180,34 +194,49 @@ func searchLivestreamsHandler(c echo.Context) error {
 	}
 	defer tx.Rollback()
 
-	var livestreamModels []*LivestreamModel
+	var livestreamSearchModels []*LivestreamSearchModel
 	if c.QueryParam("tag") != "" {
+		selectLivestreamModelsByTagSql := `
+SELECT
+  l.*
+  , u.name
+  , u.display_name
+  , u.password
+  , u.description as user_description
+  , th.id as theme_id
+  , th.dark_mode
+  , i.image
+FROM
+  tags t
+  INNER JOIN livestream_tags lt ON t.id = lt.tag_id
+  INNER JOIN livestreams l ON lt.livestream_id = l.id
+  INNER JOIN users u ON l.user_id = u.id
+  INNER JOIN themes th ON u.id = th.user_id
+  INNER JOIN icons i ON u.id = i.user_id
+WHERE
+  t.name = ?
+ORDER BY l.id DESC`
 		// タグによる取得
-		var tagIDList []int
-		if err := tx.SelectContext(ctx, &tagIDList, "SELECT id FROM tags WHERE name = ?", keyTagName); err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, "failed to get tags: "+err.Error())
-		}
-
-		query, params, err := sqlx.In("SELECT * FROM livestream_tags WHERE tag_id IN (?) ORDER BY livestream_id DESC", tagIDList)
-		if err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, "failed to construct IN query: "+err.Error())
-		}
-		var keyTaggedLivestreams []*LivestreamTagModel
-		if err := tx.SelectContext(ctx, &keyTaggedLivestreams, query, params...); err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, "failed to get keyTaggedLivestreams: "+err.Error())
-		}
-
-		for _, keyTaggedLivestream := range keyTaggedLivestreams {
-			ls := LivestreamModel{}
-			if err := tx.GetContext(ctx, &ls, "SELECT * FROM livestreams WHERE id = ?", keyTaggedLivestream.LivestreamID); err != nil {
-				return echo.NewHTTPError(http.StatusInternalServerError, "failed to get livestreams: "+err.Error())
-			}
-
-			livestreamModels = append(livestreamModels, &ls)
+		if err := tx.SelectContext(ctx, &livestreamSearchModels, selectLivestreamModelsByTagSql, keyTagName); err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, "failed to get livestreams by tags: "+err.Error())
 		}
 	} else {
 		// 検索条件なし
-		query := `SELECT * FROM livestreams ORDER BY id DESC`
+		query := `
+SELECT *
+  l.*
+  , u.name
+  , u.display_name
+  , u.password
+  , u.description as user_description
+  , th.id as theme_id
+  , th.dark_mode
+  , i.image
+FROM livestreams l
+  INNER JOIN users u ON l.user_id = u.id
+  INNER JOIN themes th ON u.id = th.user_id
+  INNER JOIN icons i ON u.id = i.user_id
+ORDER BY id DESC`
 		if c.QueryParam("limit") != "" {
 			limit, err := strconv.Atoi(c.QueryParam("limit"))
 			if err != nil {
@@ -216,14 +245,14 @@ func searchLivestreamsHandler(c echo.Context) error {
 			query += fmt.Sprintf(" LIMIT %d", limit)
 		}
 
-		if err := tx.SelectContext(ctx, &livestreamModels, query); err != nil {
+		if err := tx.SelectContext(ctx, &livestreamSearchModels, query); err != nil {
 			return echo.NewHTTPError(http.StatusInternalServerError, "failed to get livestreams: "+err.Error())
 		}
 	}
 
-	livestreams := make([]Livestream, len(livestreamModels))
-	for i := range livestreamModels {
-		livestream, err := fillLivestreamResponse(ctx, tx, *livestreamModels[i])
+	livestreams := make([]Livestream, len(livestreamSearchModels))
+	for i := range livestreamSearchModels {
+		livestream, err := fillLivestreamResponseForSearch(ctx, tx, *livestreamSearchModels[i])
 		if err != nil {
 			return echo.NewHTTPError(http.StatusInternalServerError, "failed to fill livestream: "+err.Error())
 		}
@@ -522,6 +551,44 @@ func fillLivestreamResponse(ctx context.Context, tx *sqlx.Tx, livestreamModel Li
 		ThumbnailUrl: livestreamModel.ThumbnailUrl,
 		StartAt:      livestreamModel.StartAt,
 		EndAt:        livestreamModel.EndAt,
+	}
+	return livestream, nil
+}
+
+func fillLivestreamResponseForSearch(ctx context.Context, tx *sqlx.Tx, livestreamSearchModel LivestreamSearchModel) (Livestream, error) {
+	owner, err := fillUserResponseForSearch(livestreamSearchModel)
+	if err != nil {
+		return Livestream{}, err
+	}
+
+	var livestreamTagModels []*LivestreamTagModel
+	if err := tx.SelectContext(ctx, &livestreamTagModels, "SELECT * FROM livestream_tags WHERE livestream_id = ?", livestreamSearchModel.ID); err != nil {
+		return Livestream{}, err
+	}
+
+	tags := make([]Tag, len(livestreamTagModels))
+	for i := range livestreamTagModels {
+		tagModel := TagModel{}
+		if err := tx.GetContext(ctx, &tagModel, "SELECT * FROM tags WHERE id = ?", livestreamTagModels[i].TagID); err != nil {
+			return Livestream{}, err
+		}
+
+		tags[i] = Tag{
+			ID:   tagModel.ID,
+			Name: tagModel.Name,
+		}
+	}
+
+	livestream := Livestream{
+		ID:           livestreamSearchModel.ID,
+		Owner:        owner,
+		Title:        livestreamSearchModel.Title,
+		Tags:         tags,
+		Description:  livestreamSearchModel.Description,
+		PlaylistUrl:  livestreamSearchModel.PlaylistUrl,
+		ThumbnailUrl: livestreamSearchModel.ThumbnailUrl,
+		StartAt:      livestreamSearchModel.StartAt,
+		EndAt:        livestreamSearchModel.EndAt,
 	}
 	return livestream, nil
 }
